@@ -5,7 +5,7 @@ provider "aws" {
 
 # Define the VPC
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16" # Adjust CIDR block as needed
+  cidr_block = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -17,8 +17,8 @@ resource "aws_vpc" "main" {
 # Define Subnets (at least two for Load Balancer availability)
 resource "aws_subnet" "public_a" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24" # Adjust CIDR block
-  availability_zone = "${data.aws_region.current.name}a"
+  cidr_block        = var.public_subnet_a_cidr
+  availability_zone = "${var.region}a"
   map_public_ip_on_launch = true # Instances in this subnet will get a public IP
 
   tags = {
@@ -28,8 +28,8 @@ resource "aws_subnet" "public_a" {
 
 resource "aws_subnet" "public_b" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.2.0/24" # Adjust CIDR block
-  availability_zone = "${data.aws_region.current.name}b"
+  cidr_block        = var.public_subnet_b_cidr
+  availability_zone = "${var.region}b"
   map_public_ip_on_launch = true # Instances in this subnet will get a public IP
 
   tags = {
@@ -74,13 +74,13 @@ resource "aws_route_table_association" "public_b_assoc" {
 # Create an SSH Key Pair
 resource "aws_key_pair" "deployer" {
   key_name   = "deployer-key"
-  public_key = file("~/.ssh/id_rsa.pub") # Replace with the path to your public key file
+  public_key = file(var.public_key_path)
 }
 
 # Create a Security Group for the EC2 Instance
 resource "aws_security_group" "instance_sg" {
   name_prefix = "instance-sg-"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 22
@@ -105,7 +105,7 @@ resource "aws_security_group" "instance_sg" {
 # Create a Security Group for the Load Balancer
 resource "aws_security_group" "lb_sg" {
   name_prefix = "lb-sg-"
-  vpc_id      = data.aws_vpc.main.id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 80
@@ -144,13 +144,13 @@ data "aws_vpc" "default" {
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
-    values = [data.aws_vpc.main.id]
+    values = [aws_vpc.main.id]
   }
 }
 
 # Create an EC2 Instance
 resource "aws_instance" "app_server" {
-  ami           = "ami-xxxxxxxxxxxxxxxxx" # Replace with a suitable AMI ID for your region (e.g., for Ubuntu 22.04 LTS)
+  ami           = var.ami_id
   instance_type = "t2.micro"
   key_name      = aws_key_pair.deployer.key_name
   vpc_security_group_ids = [aws_security_group.instance_sg.id]
@@ -165,7 +165,7 @@ resource "aws_instance" "app_server" {
 resource "aws_lb_target_group" "app_tg" {
   port     = 80  # Application port
   protocol = "HTTP"
-  vpc_id   = data.aws_vpc.main.id
+  vpc_id   = aws_vpc.main.id
 
   health_check {
     path     = "/" # Adjust health check path as needed
@@ -185,7 +185,7 @@ resource "aws_lb_target_group_attachment" "app_tg_attach" {
 
 # Create an Application Load Balancer
 resource "aws_lb" "app_lb" {
-  name_prefix    = "app-lb-"
+  name_prefix    = "lb-"
   internal       = false
   load_balancer_type = "application"
   security_groups = [aws_security_group.lb_sg.id]
