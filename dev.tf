@@ -135,26 +135,13 @@ resource "aws_security_group" "lb_sg" {
   }
 }
 
-# Fetch the default VPC ID
-data "aws_vpc" "default" {
-  default = true
-}
-
-# Fetch the default subnet IDs in the selected region
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [aws_vpc.main.id]
-  }
-}
-
 # Create an EC2 Instance
 resource "aws_instance" "app_server" {
   ami           = var.ami_id
   instance_type = "t2.micro"
   key_name      = aws_key_pair.deployer.key_name
   vpc_security_group_ids = [aws_security_group.instance_sg.id]
-  subnet_id     = data.aws_subnets.default.ids[0] # Use the first default subnet
+  subnet_id     = aws_subnet.public_a.id
 
   tags = {
     Name = "app-server"
@@ -189,7 +176,10 @@ resource "aws_lb" "app_lb" {
   internal       = false
   load_balancer_type = "application"
   security_groups = [aws_security_group.lb_sg.id]
-  subnets         = data.aws_subnets.default.ids
+  subnets         = [
+    aws_subnet.public_a.id,
+    aws_subnet.public_b.id,
+  ]
 
   enable_deletion_protection = false # Consider setting this to true in production
 }
